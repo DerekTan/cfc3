@@ -4,3 +4,6 @@ output/
 *.plg
 *.swp
 *~
+cscope.files
+cscope.out
+tags
