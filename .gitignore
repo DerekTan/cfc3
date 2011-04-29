@@ -1,0 +1,6 @@
+list/
+output/
+*.bak
+*.plg
+*.swp
+*~
