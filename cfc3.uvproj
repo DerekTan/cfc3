@@ -347,9 +347,9 @@
           <GroupName>Source Group 1</GroupName>
           <Files>
             <File>
-              <FileName>a.C</FileName>
+              <FileName>cfc3.C</FileName>
               <FileType>1</FileType>
-              <FilePath>.\a.C</FilePath>
+              <FilePath>.\cfc3.C</FilePath>
             </File>
           </Files>
         </Group>

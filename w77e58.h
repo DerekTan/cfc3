@@ -19,9 +19,14 @@ sfr DPH   = 0x83;
 sfr PCON  = 0x87;//PCON.7(SMOD)拨特率加倍，PCON.1(PD)掉电方式，PCON.0(IDL)冻结方式
 				//PCON.6(SMOD0)帧错检测允许，PCON.3(GF1)PCON.2(GF0)
 sfr TCON  = 0x88;//定时控制寄存器
-sfr TMOD  = 0x89;//"gate,c/t,m1,m0"x2定时器方式GATE=1时只有intx=1时才可以开放定时器x；
-	              //c/t =1时计书数方式，=0时定时方式。m1m0=00时13位计数，=01时16位=10时自装入8位，
-	              //11时定时器0分两个，定时器1停止。
+sfr TMOD  = 0x89;//Timer Mode Control :
+/*"gate,c/t,m1,m0"x2定时器方式GATE=1时只有intx=1时才可以开放定时器x；
+c/t = 1时计书数方式，
+    = 0时定时方式。
+m1m0= 00时13位计数，
+    = 01时16位=10时自装入8位，
+    = 11时定时器0分两个，定时器1停止。
+*/
 sfr TL0   = 0x8A;
 sfr TL1   = 0x8B;
 sfr TH0   = 0x8C;
@@ -47,10 +52,18 @@ sfr DPL1  = 0x84;
 sfr DPH1  = 0x85;
 sfr DPS   = 0x86;
 
-sfr CKCON = 0x8e;//wd1,wd0,t2m,t1m,t0m,md2,md1,md0
-				//wd1wd0:看门狗计数00=2^17,01=2^20,10=2^23,11=2^26
-				//t2m,t1m,t0m等于1时时钟4分频
-				//md2,md1,md0 MOVX执行机器周期000=2，001=3。。。111=9
+sfr CKCON = 0x8e;
+/* wd1|wd0|t2m|t1m|t0m|md2|md1|md0  */
+/* wd1wd0:   watchdog timer mode select bits
+ * 00=2^17,
+ * 01=2^20,
+ * 10=2^23,
+ * 11=2^26
+ * t2m,t1m,t0m: timer (x) clock set
+ * 等于1:时钟4分频
+ * 等于0:时钟12分频
+//md2,md1,md0 MOVX执行机器周期000=2，001=3。。。111=9
+*/
 sfr EXIF  = 0x91;//ie5,ie4,ie3,ie2,XT/RG,RGMD,RGSL,-
 				//ie5,ie3=1外中断下跳变中断标志
 				//ie4,ie3=2外中断上跳变中断标志
@@ -59,10 +72,10 @@ sfr SADDR = 0xa9;//从机串口0地址
 sfr SADDR1= 0xaa;//从机串口1地址
 sfr SADEN = 0xb9;//串口0地址屏蔽，等于0时所有地址都会引起中断
 sfr SADEN1= 0xba;//串口0地址屏蔽，等于0时所有地址都会引起中断
-sfr SCON1 = 0xc0;
+sfr SCON1 = 0xc0;//serial port control 1
 sfr SBUF1 = 0xc1;
 sfr ROMMAP= 0xc2;//ROMMAP.7为等待信号使能，用movx指令时，wait脚为p4.0
-sfr PMR   = 0xc4;//CD1,CD0,SWB,-,XTOFF,ALE-OFF,-DME0
+sfr PMR   = 0xc4;//Power Manager Register. CD1,CD0,SWB,-,XTOFF,ALE-OFF,-DME0
                 //cd0cd1=0时钟不变，=1-1/4，=2-1/64，=3=1/1024
                 //swb=1强制4分频，外中断或串口中断唤醒
                 //aleoff =1时ale信号终止，外部内存访问时自动唤醒
