@@ -163,14 +163,14 @@
     <cbSel>0</cbSel>
     <File>
       <GroupNumber>1</GroupNumber>
-      <FileNumber>0</FileNumber>
+      <FileNumber>1</FileNumber>
       <FileType>1</FileType>
       <tvExp>0</tvExp>
       <Focus>0</Focus>
-      <ColumnNumber>0</ColumnNumber>
+      <ColumnNumber>29</ColumnNumber>
       <tvExpOptDlg>0</tvExpOptDlg>
-      <TopLine>692</TopLine>
-      <CurrentLine>704</CurrentLine>
+      <TopLine>384</TopLine>
+      <CurrentLine>395</CurrentLine>
       <bDave2>0</bDave2>
       <PathWithFileName>.\cfc3.C</PathWithFileName>
       <FilenameWithoutPath>cfc3.C</FilenameWithoutPath>
@@ -1522,9 +1522,9 @@
       <Documents>
         <Doc>
           <Name>.\cfc3.C</Name>
-          <ColumnNumber>0</ColumnNumber>
-          <TopLine>692</TopLine>
-          <CurrentLine>704</CurrentLine>
+          <ColumnNumber>29</ColumnNumber>
+          <TopLine>384</TopLine>
+          <CurrentLine>395</CurrentLine>
         </Doc>
       </Documents>
     </MDIGroup>
