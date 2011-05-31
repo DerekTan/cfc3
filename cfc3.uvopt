@@ -167,10 +167,10 @@
       <FileType>1</FileType>
       <tvExp>0</tvExp>
       <Focus>0</Focus>
-      <ColumnNumber>29</ColumnNumber>
+      <ColumnNumber>38</ColumnNumber>
       <tvExpOptDlg>0</tvExpOptDlg>
       <TopLine>384</TopLine>
-      <CurrentLine>395</CurrentLine>
+      <CurrentLine>410</CurrentLine>
       <bDave2>0</bDave2>
       <PathWithFileName>.\cfc3.C</PathWithFileName>
       <FilenameWithoutPath>cfc3.C</FilenameWithoutPath>
@@ -1522,9 +1522,9 @@
       <Documents>
         <Doc>
           <Name>.\cfc3.C</Name>
-          <ColumnNumber>29</ColumnNumber>
+          <ColumnNumber>38</ColumnNumber>
           <TopLine>384</TopLine>
-          <CurrentLine>395</CurrentLine>
+          <CurrentLine>410</CurrentLine>
         </Doc>
       </Documents>
     </MDIGroup>

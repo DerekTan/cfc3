@@ -35,10 +35,9 @@
 
 #undef CHIP_905
 #define LED_MSG_LEN     5
-#define LED_MSG_NUM     1
-#define SHOW_TIME       2          //unit: s
+#define LED_MSG_NUM     6
+#define SHOW_TIME       60          //unit: 0.1s
 #define MAX_RECEIVED_ID_ARRAY_LEN 64
-
 
 #define LED_TICK()                   \
     do {                                    \
@@ -77,6 +76,17 @@ sbit LED_CLK_PIN = P0^3;
 sbit LED_DATA_PIN = P0^4;
 sbit LED_STR_PIN = P0^5;
 
+sbit DIP1 = P1^4;
+sbit DIP2 = P1^5;
+sbit DIP3 = P1^6;
+sbit DIP4 = P1^7;
+
+sbit TEST_PIN = P0^0;
+sbit SPEAKER_PIN = P2^1;
+
+#define SPEAKER_ON     1
+#define SPEAKER_OFF    0
+
 #if 0
 sbit FMQ=P3^2;
 sbit LED=P3^6;
@@ -100,12 +110,15 @@ sbit CSN=P0^7;
 sbit www=P2^0;//0708
 
 uchar glbLedRefreshFlag = TRUE;
+uchar glbAlarmNum = 0;
 /******************************/
 #if 0
 idata uint idgh_id[32];
 #endif
 uchar idgh_zz=0,addr;
+#if 0
 uchar rec_in_time,start95time;
+#endif
 uchar trx485=0;
 xdata uchar yrx=0;//=0有接收
 /**************************************************/
@@ -227,7 +240,6 @@ void ledShowChar(uchar ch){
 }
 /******************************/
 
-uchar dis_time;             //显示时间
 xdata uchar dispBuf[18];    //显示数组0最低位
 
 /******************************/
@@ -303,9 +315,7 @@ void refreshLedMsgTimer(void) {
     uchar i;
     for (i=0; i<LED_MSG_NUM; i++) {
         if (ledMsgArray[i].timer > 0) {
-            //if (-ledMsgArray[i].timer == 0)
-            ledMsgArray[i].timer--;
-            if (ledMsgArray[i].timer == 0)
+            if (--ledMsgArray[i].timer == 0)
                 glbLedRefreshFlag = TRUE;
         }
     }
@@ -316,35 +326,53 @@ void addId2LedArray(uchar idx, uint id) {
     id2str(idx, id);
     ledMsgArray[idx].timer = SHOW_TIME;
     glbLedRefreshFlag = TRUE;
+    glbAlarmNum++;
 }
 
 uchar findIdFromLedArray(uint id) {
     uchar i;
-    return FALSE;
     for (i=0; i<LED_MSG_NUM; i++) {
         if (ledMsgArray[i].timer>0 && ledMsgArray[i].id == id)
+            //ledMsgArray[i].timer = SHOW_TIME;
             return TRUE;
     }
     return FALSE;
 }
 
 /******************************/
-uchar abc = 0, abc1 = 0;//接收时间
+uchar cnt_01s = 0;//接收时间
+uchar cnt_alarm = 0;    //控制蜂鸣器, clk 0.02s; cnt_alarm 0-40 ON, 40-50 OFF;
 uchar glbTimer = 0;
 uchar glbRefreshTimerFlag = 0;
-/******************************/
+/****************
+ * f=110592/13/(65536-xxxx)
+ ****************/
+
 void time0() interrupt 1 {
     /* TF0 automatically cleared by hardware */
-    TH0=0xf1;TL0=0x9f;//4ms---9a
+    TH0=0xBD; TL0=0x8A; //0.02s, actual 
+#if 0
 	rec_in_time+=1;//接收延时
-	abc++;
-	if(abc>120){//50ms
-		abc=0;abc1++;
-		dis_time+=1;//1000ms显示
+#endif
+	if(++cnt_01s > 5){//0.1s
+		cnt_01s=0;
+#ifdef CHIP_905
 		start95time+=1;
+#endif
         //initLedMsgArray();
         refreshLedMsgTimer();
 	}
+    if (glbAlarmNum !=0 ) {
+        cnt_alarm++;
+        if (cnt_alarm == 1)
+            SPEAKER_PIN = SPEAKER_ON;
+        else if (cnt_alarm == 40)
+            SPEAKER_PIN = SPEAKER_OFF;
+        else if (cnt_alarm == 50) {
+            cnt_alarm = 0;
+            glbAlarmNum--;
+        }
+    }
 }
 /******************************/
 
@@ -711,6 +739,7 @@ void uartHandler(){//接收数据处理并发送
 
 /******************************/
 main(){
+    SPEAKER_PIN = SPEAKER_OFF;
     ENABLE_WD_RST();
     PMR |= 0x01;            //enable the on-chip 1KB MOVX SRAM
 
@@ -725,7 +754,7 @@ main(){
 
     CKCON |= 0x40;          //set WD time-out 2^17 clocks
     TMOD=0x21;              //set T1: 8bits auto-reload from THx
-                            //set T0: 18bits, no prescale
+                            //set T0: 18bits, no prescale   //spec error, should be 16bits
 
     /* set timer 0 */
     TH0=0x4c;TL0=0x00;      //50ms
@@ -801,11 +830,9 @@ main(){
         WD_RST(); 
 
 
-        //if (glbLedRefreshFlag == TRUE)
+        if (glbLedRefreshFlag == TRUE)
             ledShowAll();
             
-        //addId2LedArray(0, 1234);//test only
-        
         www=!www;//0708
         INT0 = !INT0;       //touch MAX813L
 #if 0
