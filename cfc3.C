@@ -35,9 +35,11 @@
 
 #undef CHIP_905
 #define LED_MSG_LEN     5
-#define LED_MSG_NUM     6
+#define DISP_ID_NUM     6
 #define SHOW_TIME       60          //unit: 0.1s
-#define MAX_RECEIVED_ID_ARRAY_LEN 64
+#define ALIVE_TIME      300          //uint: 0.1s
+#define RECEIVED_ARRAY_LEN  64
+#define ALIVE_ARRAY_LEN     100
 
 #define LED_TICK()                   \
     do {                                    \
@@ -64,10 +66,26 @@ while (0)
 typedef struct {
     uint id;
     uchar idStr[LED_MSG_LEN];
-    uchar timer;
-} LED_MSG;
+    uchar isAlive;        // from alive array or not?
+    uchar dtime;
+} tDispArrayItem;
 
-LED_MSG ledMsgArray[LED_MSG_NUM];
+typedef struct {
+    uint id;
+    //uchar idStr[LED_MSG_LEN];
+    uchar inDisplay;
+    uint atime;
+} tAliveArrayItem;
+
+xdata tDispArrayItem DispArray[DISP_ID_NUM];
+xdata tAliveArrayItem AliveArray[ALIVE_ARRAY_LEN];
+
+uchar aliveIdNum=0;
+uchar pAliveNext=0;
+
+xdata uint ReceivedArray[RECEIVED_ARRAY_LEN];//接收id组
+uchar receivedIdNum=0;//接收指针
+
 /******************************/
 //sbit LED_DATA_PIN=P1^0;
 //sbit LED_CLK_PIN=P1^1;
@@ -252,16 +270,16 @@ void id2str(uchar idx, uint id){//输入temp0输出4最高位
     if(id & 0x8000) id_temp |= 0x2000;      //MSB
 
     for(i=0; i<LED_MSG_LEN; i++){      //singleIdStr[0]: LSB
-        ledMsgArray[idx].idStr[i] = ledTable[id_temp % 10];
+        DispArray[idx].idStr[i] = ledTable[id_temp % 10];
         id_temp /= 10;
         if (id_temp == 0) break;
     }
     /* remove the head 0s */
     while (++i < LED_MSG_LEN)
-        ledMsgArray[idx].idStr[i] = 0;
+        DispArray[idx].idStr[i] = 0;
 
-    if (id & 0x4000) ledMsgArray[idx].idStr[1] |=0x80;
-    if (id & 0x2000) ledMsgArray[idx].idStr[2] |=0x80;
+    if (id & 0x4000) DispArray[idx].idStr[1] |=0x80;
+    if (id & 0x2000) DispArray[idx].idStr[2] |=0x80;
 }
 
 void ledShowAll(){//显示数组中的数
@@ -269,76 +287,112 @@ void ledShowAll(){//显示数组中的数
 
     glbLedRefreshFlag = FALSE;
 
-    //LED_STR_PIN=0;
     LED_OPEN();
-#if 0
-    //test only
-    for (j=0; j<LED_MSG_LEN; j++)
-        ledShowChar(0x7f);
-#else
-    for (i=0; i<LED_MSG_NUM; i++) {
-        if (ledMsgArray[i].timer != 0) {
+    for (i=0; i<DISP_ID_NUM; i++) {
+        if (DispArray[i].dtime != 0) {
             for (j=0; j<LED_MSG_LEN; j++)
-                ledShowChar(ledMsgArray[i].idStr[j]);
+                ledShowChar(DispArray[i].idStr[j]);
         }
         else {
             for (j=0; j<LED_MSG_LEN; j++)
                 ledShowChar(0);
         }
     }
-#endif
     LED_CLOSE();
-    //LED_STR_PIN=1;
 }
 
-void ledFormat(uchar seg){//显示数组中的数
+void ledFormat(uchar seg){//全部显示同一个数字
     uchar i, j;
-    LED_STR_PIN=0;
+    LED_OPEN();
 
-    for (i=0; i<LED_MSG_NUM; i++) {
+    for (i=0; i<DISP_ID_NUM; i++) {
         for (j=0; j<LED_MSG_LEN; j++)
             ledShowChar(seg);
     }
-    LED_STR_PIN=1;
+    LED_CLOSE();
 }
 
-void initLedMsgArray(void) {
+void initDispArray(void) {
     uchar i;
-    //ledMsgArray[0].timer = 0;
+    //DispArray[0].dtime = 0;
 
-    for(i=0; i<LED_MSG_NUM; i++){      
-        ledMsgArray[i].timer = 0;
+    for(i=0; i<DISP_ID_NUM; i++){      
+        DispArray[i].dtime = 0;
     }
+    glbLedRefreshFlag = TRUE;
 }
 
-void refreshLedMsgTimer(void) {
+void addDisp2Alive(uint id) {
+    AliveArray[aliveIdNum].id = id;
+    AliveArray[aliveIdNum].atime = ALIVE_TIME;
+    AliveArray[aliveIdNum].inDisplay = FALSE;
+    aliveIdNum++;
+}
+
+void return2Alive(uint id) {
     uchar i;
-    for (i=0; i<LED_MSG_NUM; i++) {
-        if (ledMsgArray[i].timer > 0) {
-            if (--ledMsgArray[i].timer == 0)
-                glbLedRefreshFlag = TRUE;
+    for (i=0; i<aliveIdNum; i++) {
+        if (AliveArray[i].id == id) {
+            AliveArray[i].inDisplay = FALSE;
+            return;
         }
     }
 }
 
-void addId2LedArray(uchar idx, uint id) {
-    ledMsgArray[idx].id = id;
-    id2str(idx, id);
-    ledMsgArray[idx].timer = SHOW_TIME;
-    glbLedRefreshFlag = TRUE;
-    glbAlarmNum++;
+void refreshLedMsgTimer(void) {
+    uchar i, k;
+    for (i=0; i<DISP_ID_NUM; i++) {
+        if (DispArray[i].dtime > 0) {
+            if (--DispArray[i].dtime == 0) {
+                glbLedRefreshFlag = TRUE;
+                if (DispArray[i].isAlive == FALSE) {
+                    addDisp2Alive(DispArray[i].id);
+                }
+                else {  //in Alive Array
+                    return2Alive(DispArray[i].id);
+                }
+            }
+        }
+    }
+
+    k = 0;
+    for (i=0; i<aliveIdNum; i++) {
+        if (--AliveArray[i].atime == 0)
+            k++;
+        else if (k)
+            AliveArray[i-k] = AliveArray[i];
+    }
+    aliveIdNum -= k;
 }
 
-uchar findIdFromLedArray(uint id) {
+void addId2DispArray(uchar idx, uint id, uchar flag) {
+    DispArray[idx].id = id;
+    id2str(idx, id);
+    DispArray[idx].dtime = SHOW_TIME;
+    DispArray[idx].isAlive = flag;
+    glbLedRefreshFlag = TRUE;
+    if (flag == FALSE) glbAlarmNum++;
+}
+
+uchar findIdFromDispArray(uint id) {
     uchar i;
-    for (i=0; i<LED_MSG_NUM; i++) {
-        if (ledMsgArray[i].timer>0 && ledMsgArray[i].id == id)
-            //ledMsgArray[i].timer = SHOW_TIME;
+    for (i=0; i<DISP_ID_NUM; i++) {
+        if (DispArray[i].dtime>0 && DispArray[i].id == id)
+            //DispArray[i].dtime = SHOW_TIME;
             return TRUE;
     }
     return FALSE;
 }
 
+uchar findIdFromAliveArray(uint id) {
+    uchar i;
+    for (i=0; i<aliveIdNum; i++) {
+        if (AliveArray[i].id == id)
+            AliveArray[i].atime = ALIVE_TIME;
+            return TRUE;
+    }
+    return FALSE;
+}
 /******************************/
 uchar cnt_01s = 0;//接收时间
 uchar cnt_alarm = 0;    //控制蜂鸣器, clk 0.02s; cnt_alarm 0-40 ON, 40-50 OFF;
@@ -359,7 +413,7 @@ void time0() interrupt 1 {
 #ifdef CHIP_905
 		start95time+=1;
 #endif
-        //initLedMsgArray();
+        //initDispArray();
         refreshLedMsgTimer();
 	}
     if (glbAlarmNum !=0 ) {
@@ -397,7 +451,7 @@ void crc8(){
 }
 #endif
 /******************************/
-//接收到ID时rec_id_suc=1;接收id暂存receivedIdArray[2];0高1低
+//接收到ID时rec_id_suc=1;接收id暂存ReceivedArray[2];0高1低
 uchar uartInt0Status=0,axor,aa_reg;
 bit rec_id_suc=0;//接收id成功标志=1
 uint uartCurrRxId;
@@ -483,17 +537,14 @@ void rx95(){//
 }
 #endif
 
-/*****************************************************************************/
-xdata uint receivedIdArray[MAX_RECEIVED_ID_ARRAY_LEN];//接收id组
-uchar receivedIdPos=0;//接收指针
 
 /*****************************************************************************
- * 名称：find_id(uint16 *ptr_id,uint16 size,uint16 id)
+ * 名称：findIdFromReceivedArray(uint16 *ptr_id,uint16 size,uint16 id)
  * 功能：找和id相同的号
  * 入口参数：size=长度，id=用户号
  * 出口参数：返回size无相同，否则为相同id号位置
  ****************************************************************************/
-uchar find_id(uint *ptr_id,uint size,uint id){
+uchar findIdFromReceivedArray(uint *ptr_id,uint size,uint id){
     uchar i;
     for(i=0;i<size;i++){
         if(*(ptr_id+i)==id) break;
@@ -512,15 +563,16 @@ uchar rectx_id_zz=0;//接收指针
 void handleUartRxId(){
     if(rec_id_suc){//有接收排队
         rec_id_suc=0;
-        if (receivedIdPos >= MAX_RECEIVED_ID_ARRAY_LEN) return;
-        if (findIdFromLedArray(uartCurrRxId) == TRUE) return;
-        if(find_id(receivedIdArray, receivedIdPos, uartCurrRxId)==receivedIdPos){//无相同
-            receivedIdArray[receivedIdPos]=uartCurrRxId;        //添加到队列后面
-            receivedIdPos++;
-            //receivedIdPos&=0x3f;//最多64个
+        if (receivedIdNum >= RECEIVED_ARRAY_LEN) return;
+        if (findIdFromDispArray(uartCurrRxId) == TRUE) return;
+        if (findIdFromAliveArray(uartCurrRxId) == TRUE) return;
+        if(findIdFromReceivedArray(ReceivedArray, receivedIdNum, uartCurrRxId)==receivedIdNum){//无相同
+            ReceivedArray[receivedIdNum]=uartCurrRxId;        //添加到队列后面
+            receivedIdNum++;
+            //receivedIdNum&=0x3f;//最多64个
         }
 #if 0
-        if(find_id(rectx_id,rectx_id_zz,uartCurrRxId)==rectx_id_zz){//无相同
+        if(findIdFromReceivedArray(rectx_id,rectx_id_zz,uartCurrRxId)==rectx_id_zz){//无相同
             rectx_id[rectx_id_zz]=uartCurrRxId;
             if(rectx_id_zz<15) rectx_id_zz++;
         }
@@ -533,12 +585,12 @@ void handleUartRxId(){
 void rec_id95_cl(){
     if(rec_id95_suc){//有接收排队
         rec_id95_suc=0;
-        if(find_id(receivedIdArray,receivedIdPos,rec95id)==receivedIdPos){//无相同
-            receivedIdArray[receivedIdPos]=rec95id;
-            receivedIdPos++;
-            receivedIdPos&=0x3f;
+        if(findIdFromReceivedArray(ReceivedArray,receivedIdNum,rec95id)==receivedIdNum){//无相同
+            ReceivedArray[receivedIdNum]=rec95id;
+            receivedIdNum++;
+            receivedIdNum&=0x3f;
         }
-        if(find_id(rectx_id,rectx_id_zz,rec95id)==rectx_id_zz){//无相同
+        if(findIdFromReceivedArray(rectx_id,rectx_id_zz,rec95id)==rectx_id_zz){//无相同
             rectx_id[rectx_id_zz]=rec95id;
             if(rectx_id_zz<15) rectx_id_zz++;
             //rectx_id_zz&=0x0f;
@@ -551,26 +603,30 @@ void rec_id95_cl(){
 #define DISTIME 20
 uchar idDispStatus=0;
 uint cgh=0;//要查工号的id号
-void idPopAndDisp(){//将receivedIdArray内容显示
-    uchar i=0, j=0;
-    if(receivedIdPos!=0) {//有接收
-        for(i=0; i<receivedIdPos; i++){
-            for (; j<LED_MSG_NUM; j++) {     //maybe "while" is better
-                if (ledMsgArray[j].timer == 0) {
-                    addId2LedArray(j, receivedIdArray[i]);
-                    break;
-                }
-            }
-            if (j == LED_MSG_NUM)   //ledMsgArray full
-                break;
+void idPopAndDisp(void){
+    uchar i=0, j=0, k=0;
+    if (receivedIdNum != 0) {//add received ID to display array
+        for (j=0; j<DISP_ID_NUM; j++) {
+            if (DispArray[j].dtime != 0) continue;
+            addId2DispArray(j, ReceivedArray[i], FALSE);
+            i++;
+            if (i == receivedIdNum) break;
         }
-
-        if (receivedIdPos == i)     //all displayed, empty the receivedIdArray
-            receivedIdPos = 0;
-        else {                      //receivedId i has not been displayed
-            for(j = i; j<receivedIdPos; j++)    //pop ids displayed
-                receivedIdArray[j-i] = receivedIdArray[j];
-            receivedIdPos = j-i;
+        for(k=i; k<receivedIdNum; k++)    //pop ids displayed
+            ReceivedArray[k-i] = ReceivedArray[k];
+        receivedIdNum -= i;
+    }
+    if (aliveIdNum != 0) {//add alive ID to display array
+        k = aliveIdNum;
+        for (; j<DISP_ID_NUM; j++) {
+            if (DispArray[j].dtime != 0) continue;
+            if (k==0) break;
+            if (AliveArray[pAliveNext].inDisplay == TRUE) continue;
+            addId2DispArray(j, AliveArray[pAliveNext].id, TRUE);
+            //addId2DispArray(j, 1000+j, TRUE);
+            AliveArray[pAliveNext].inDisplay = TRUE;
+            k--;
+            pAliveNext = (pAliveNext+1) % aliveIdNum;
         }
     }
 }
@@ -809,7 +865,7 @@ main(){
 #endif
     ledFormat(0x40);
 
-    initLedMsgArray();
+    initDispArray();
 
     while(1) {
 #ifdef CHIP_905
