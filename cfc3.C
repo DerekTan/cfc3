@@ -582,6 +582,11 @@ xdata uchar uartTxBuf[64];//15为长度
 uchar pUartRx=0;//收指针
 xdata uchar uartRxBuf[64];
 
+void uart1SendChar(uchar ch) {
+    TI_1 = 0;
+    SBUF1=ch;
+    while(!TI_1);
+}
 void sint1() interrupt 7{
 #if 0
     if(TI){
@@ -753,7 +758,7 @@ main(){
 #endif
 
     CKCON |= 0x40;          //set WD time-out 2^17 clocks
-    TMOD=0x21;              //set T1: 8bits auto-reload from THx
+    TMOD=0x21;              //set T1: mode 2, 8bits auto-reload from THx
                             //set T0: 18bits, no prescale   //spec error, should be 16bits
 
     /* set timer 0 */
@@ -762,46 +767,35 @@ main(){
     ET0=1;                  //enable T0 interrupt
     PT0=1;                  //set T0 interrupt higher priority
 
-    //TH1=0xfd;TL1=0xfd;TR1=1;//9.6k
-
+    /* UART1 SETTINGS */
 #if 0
-    SCON1=0x50;             //Uart1 mode: 1
-                            //set Serial Recption enable
+	TH1=0xfd;TL1=0xfd;//9.6k
 #else
-    //SCON1 = 0xd0;           //Uart1 mode: 3
+    TH1 = 0xf4;
+    TL1 = 0xf4;             //2.4k
 #endif
-    //ES1=1;                  //Enable Serial Port 1 interrupt
 
+    SCON1=0x70;             //Uart1 mode: 1
+                            //set Serial Recption enable
+    //SCON1 = 0xd0;           //Uart1 mode: 3
+    
+    TR1 = 1;                //set timer 1 on
+    ES1=1;                  //Enable Serial Port 1 interrupt
+
+    /* UART0 SETTINGS */
     RCAP2H=0xff;            //MSB of timer2 auto-reload
     RCAP2L=0xdc;	        //LSB of timer2 auto-reload
     //RCAP2L=0xb8;	        //LSB of timer2 auto-reload
                             //ffdc 9.6k;ffb8 4.8k;fee0h-1.2k
-#if 0
-    T2CON=0x34;             //Serial port 0, Receive clock flag: timer 2 overflow used
-                            //Serial port 0, Transmit clock flag: timer 2 overflow used
-#else
     T2CON=0x34;             //serial port 0, tx: T2, RX: T2
                             //baud rate generator mode, 16bit counter with auto-reload
-                          
-#endif
-
-#if 0
-    SCON=0xd0;              //Serial port control : mode 3
-                            //enable multiprocessor communication
-#else
-    SCON=0x70;              //Serial port control : mode 1
-#endif
+    SCON=0x70;              //Serial port 0 control : mode 1-----mode 3???
 
     ES=1;                   //Enable Serial Port 0 interrupt
     EA=1;                   //global interrupt enable
 
     //FMQ=0;DE=0;RE=0;        //P3^2 P3^4 P3^5
 
-#if 0
-    for(addr=0;addr<32;addr++){//清对应表
-        idgh_id[addr]=0xffff;
-    }
-#endif
     addr=P1;addr=addr>>4;
 
 #ifdef CHIP_905
@@ -814,6 +808,14 @@ main(){
     while(1) {
 #ifdef CHIP_905
         TRX_CE=1;
+#endif
+
+#if 0
+        uart1SendChar('h');
+        uart1SendChar('e');
+        uart1SendChar('l');
+        uart1SendChar('l');
+        uart1SendChar('o');
 #endif
         WD_RST(); 
         addr = P1>>4;
