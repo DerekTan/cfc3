@@ -81,6 +81,7 @@ xdata tDispArrayItem DispArray[DISP_ID_NUM];
 xdata tAliveArrayItem AliveArray[ALIVE_ARRAY_LEN];
 
 uchar aliveIdNum=0;
+uchar undispAliveIdNum=0;
 uchar pAliveNext=0;
 
 xdata uint ReceivedArray[RECEIVED_ARRAY_LEN];//接收id组
@@ -164,6 +165,7 @@ xdata uchar yrx=0;//=0有接收
 /**************************************************/
 xdata uchar data0[10];
 
+void uart1SendChar(uchar ch);
 #ifdef CHIP_905
 void out905(uchar ch){//将aa输出到905
     char i;
@@ -262,7 +264,7 @@ xdata uchar dispBuf[18];    //显示数组0最低位
 
 /******************************/
 
-void id2str(uchar idx, uint id){//输入temp0输出4最高位
+void id2str(uchar idx, uint id, uchar isalive){
     uchar i;
     uint id_temp;
 
@@ -278,8 +280,9 @@ void id2str(uchar idx, uint id){//输入temp0输出4最高位
     while (++i < LED_MSG_LEN)
         DispArray[idx].idStr[i] = 0;
 
-    if (id & 0x4000) DispArray[idx].idStr[1] |=0x80;
-    if (id & 0x2000) DispArray[idx].idStr[2] |=0x80;
+    if (id & 0x2000) DispArray[idx].idStr[1] |= 0x80;    //电池电量
+    if (id & 0x4000) DispArray[idx].idStr[2] |= 0x80;    //按键报警
+    if (isalive == FALSE) DispArray[idx].idStr[4] |= 0x80;    //新来的！
 }
 
 void ledShowAll(){//显示数组中的数
@@ -327,13 +330,15 @@ void addDisp2Alive(uint id) {
     AliveArray[aliveIdNum].atime = ALIVE_TIME;
     AliveArray[aliveIdNum].inDisplay = FALSE;
     aliveIdNum++;
+    undispAliveIdNum++;
 }
 
-void return2Alive(uint id) {
+void return2Alive(uint id) {    //如果aliveArray中能找到，则刷新，如果已经从alive队列中删除，则直接扔掉
     uchar i;
     for (i=0; i<aliveIdNum; i++) {
         if (AliveArray[i].id == id) {
             AliveArray[i].inDisplay = FALSE;
+            undispAliveIdNum++;
             return;
         }
     }
@@ -357,29 +362,33 @@ void refreshLedMsgTimer(void) {
 
     k = 0;
     for (i=0; i<aliveIdNum; i++) {
-        if (--AliveArray[i].atime == 0)
+        if (--AliveArray[i].atime == 0) {
             k++;
+            if (AliveArray[i].inDisplay == FALSE)
+                undispAliveIdNum--;
+        }
         else if (k)
             AliveArray[i-k] = AliveArray[i];
     }
     aliveIdNum -= k;
 }
 
-void addId2DispArray(uchar idx, uint id, uchar flag) {
+void addId2DispArray(uchar idx, uint id, uchar isalive) {
     DispArray[idx].id = id;
-    id2str(idx, id);
+    id2str(idx, id, isalive);
     DispArray[idx].dtime = SHOW_TIME;
-    DispArray[idx].isAlive = flag;
+    DispArray[idx].isAlive = isalive;
     glbLedRefreshFlag = TRUE;
-    if (flag == FALSE) glbAlarmNum++;
+    if (isalive == FALSE) glbAlarmNum++;
 }
 
 uchar findIdFromDispArray(uint id) {
     uchar i;
     for (i=0; i<DISP_ID_NUM; i++) {
-        if (DispArray[i].dtime>0 && DispArray[i].id == id)
+        if (DispArray[i].dtime>0 && DispArray[i].id == id) {
             //DispArray[i].dtime = SHOW_TIME;
             return TRUE;
+        }
     }
     return FALSE;
 }
@@ -387,9 +396,10 @@ uchar findIdFromDispArray(uint id) {
 uchar findIdFromAliveArray(uint id) {
     uchar i;
     for (i=0; i<aliveIdNum; i++) {
-        if (AliveArray[i].id == id)
+        if (AliveArray[i].id == id) {
             AliveArray[i].atime = ALIVE_TIME;
             return TRUE;
+        }
     }
     return FALSE;
 }
@@ -420,9 +430,9 @@ void time0() interrupt 1 {
         cnt_alarm++;
         if (cnt_alarm == 1)
             SPEAKER_PIN = SPEAKER_ON;
-        else if (cnt_alarm == 40)
+        else if (cnt_alarm == 15)
             SPEAKER_PIN = SPEAKER_OFF;
-        else if (cnt_alarm == 50) {
+        else if (cnt_alarm == 25) {
             cnt_alarm = 0;
             glbAlarmNum--;
         }
@@ -564,8 +574,8 @@ void handleUartRxId(){
     if(rec_id_suc){//有接收排队
         rec_id_suc=0;
         if (receivedIdNum >= RECEIVED_ARRAY_LEN) return;
-        if (findIdFromDispArray(uartCurrRxId) == TRUE) return;
         if (findIdFromAliveArray(uartCurrRxId) == TRUE) return;
+        if (findIdFromDispArray(uartCurrRxId) == TRUE) return;  //must after finding from AliveArray
         if(findIdFromReceivedArray(ReceivedArray, receivedIdNum, uartCurrRxId)==receivedIdNum){//无相同
             ReceivedArray[receivedIdNum]=uartCurrRxId;        //添加到队列后面
             receivedIdNum++;
@@ -605,9 +615,12 @@ uchar idDispStatus=0;
 uint cgh=0;//要查工号的id号
 void idPopAndDisp(void){
     uchar i=0, j=0, k=0;
-    if (receivedIdNum != 0) {//add received ID to display array
+    //add received IDs to display array
+    if (receivedIdNum != 0) {
         for (j=0; j<DISP_ID_NUM; j++) {
-            if (DispArray[j].dtime != 0) continue;
+            if (DispArray[j].dtime != 0) { 
+                continue;
+            }
             addId2DispArray(j, ReceivedArray[i], FALSE);
             i++;
             if (i == receivedIdNum) break;
@@ -616,18 +629,19 @@ void idPopAndDisp(void){
             ReceivedArray[k-i] = ReceivedArray[k];
         receivedIdNum -= i;
     }
-    if (aliveIdNum != 0) {//add alive ID to display array
-        k = aliveIdNum;
-        for (; j<DISP_ID_NUM; j++) {
-            if (DispArray[j].dtime != 0) continue;
-            if (k==0) break;
-            if (AliveArray[pAliveNext].inDisplay == TRUE) continue;
-            addId2DispArray(j, AliveArray[pAliveNext].id, TRUE);
-            //addId2DispArray(j, 1000+j, TRUE);
-            AliveArray[pAliveNext].inDisplay = TRUE;
-            k--;
-            pAliveNext = (pAliveNext+1) % aliveIdNum;
+    //add alive IDs which are not being displayed to display array
+    while(j<DISP_ID_NUM && undispAliveIdNum>0) {
+        if (DispArray[j].dtime != 0) {
+            j++;
+            continue;
         }
+        if (AliveArray[pAliveNext].inDisplay != TRUE) {
+            addId2DispArray(j, AliveArray[pAliveNext].id, TRUE);
+            AliveArray[pAliveNext].inDisplay = TRUE;
+            j++;
+            undispAliveIdNum--;
+        }
+        pAliveNext = (pAliveNext+1) % aliveIdNum;
     }
 }
 /******************************/
@@ -639,9 +653,9 @@ uchar pUartRx=0;//收指针
 xdata uchar uartRxBuf[64];
 
 void uart1SendChar(uchar ch) {
-    TI_1 = 0;
     SBUF1=ch;
     while(!TI_1);
+    TI_1 = 0;
 }
 void sint1() interrupt 7{
 #if 0
